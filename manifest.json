@@ -1,0 +1,24 @@
+{
+  "name": "LPG Driver - LaundryBar",
+  "short_name": "LPG Driver",
+  "description": "Delivery app for LPG cylinders to LaundryBar branches",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F2F6FA",
+  "theme_color": "#20548D",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "lb-logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "lb-logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

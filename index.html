@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>LPG Driver - LaundryBar</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="lb-logo.jpg">
+<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="config.js"></script>
+<style>
+:root {
+  --navy: #20548D;
+  --pink: #E11A53;
+  --bg: #F2F6FA;
+  --text: #22303F;
+  --card: #fff;
+  --border: #d0d7de;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Nunito Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-tap-highlight-color: transparent;
+}
+header {
+  background: var(--navy);
+  color: #fff;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.1);
+}
+header img { height: 36px; border-radius: 6px; }
+header h1 { margin: 0; font-size: 1.25rem; font-weight: 700; }
+header .driver { margin-left: auto; font-size: .9rem; opacity: .9; }
+.screen { display: none; padding: 16px; max-width: 600px; margin: 0 auto; }
+.screen.active { display: block; }
+h2 { color: var(--navy); margin-top: 0; }
+.card {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+button, .btn {
+  background: var(--pink);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 1rem;
+  font-weight: 600;
+  min-height: 48px;
+  width: 100%;
+  margin: 6px 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+button.secondary { background: var(--navy); }
+button.outline { background: transparent; color: var(--navy); border: 2px solid var(--navy); }
+button:disabled { opacity: .5; }
+.queue-badge {
+  background: var(--pink);
+  color: #fff;
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: .8rem;
+  font-weight: 700;
+  display: inline-block;
+  margin-left: 8px;
+}
+input, select, textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1rem;
+  margin: 6px 0 12px;
+  font-family: inherit;
+}
+#qr-reader, #qr-reader-cyl { width: 100%; max-width: 400px; margin: 0 auto; }
+.video-preview, .photo-preview { max-width: 100%; border-radius: 8px; margin: 8px 0; }
+.flags { color: var(--pink); font-weight: 600; margin: 8px 0; }
+.small { font-size: .85rem; opacity: .8; }
+.row { display: flex; gap: 8px; }
+.row button { flex: 1; }
+.hidden { display: none !important; }
+.center { text-align: center; }
+.bilingual { font-size: .9rem; line-height: 1.4; }
+</style>
+</head>
+<body>
+<header>
+  <img src="lb-logo.jpg" alt="LaundryBar">
+  <h1>LPG Driver</h1>
+  <div class="driver" id="driver-name">—</div>
+</header>
+
+<!-- Screen 0: Setup / Driver select + permissions -->
+<div id="screen-setup" class="screen active">
+  <h2>Welcome / Selamat datang</h2>
+  <div class="bilingual">
+    <p><strong>EN:</strong> Select your name and allow camera + location so we can prove you are at the correct branch and scan cylinders.</p>
+    <p><strong>BM:</strong> Pilih nama anda dan benarkan kamera + lokasi supaya kami boleh buktikan anda di cawangan yang betul dan imbas silinder.</p>
+  </div>
+  <label>Driver name / Nama pemandu</label>
+  <select id="driver-select"></select>
+  <button id="btn-start">Continue / Teruskan</button>
+</div>
+
+<!-- Screen 1: My jobs -->
+<div id="screen-home" class="screen">
+  <h2>My jobs today / Kerja hari ini <span id="queue-badge" class="queue-badge hidden"></span></h2>
+  <div id="jobs-list"></div>
+  <button id="btn-depot" class="secondary">Depot (load / return)</button>
+  <button id="btn-other" class="outline">Other branch / Cawangan lain</button>
+  <button id="btn-sync" class="outline">Sync pending uploads</button>
+</div>
+
+<!-- Screen 2: Arrive / Scan branch -->
+<div id="screen-arrive" class="screen">
+  <h2>Arrive at branch / Tiba di cawangan</h2>
+  <p id="arrive-info"></p>
+  <p class="small">Scan the branch QR on the gas cage / Imbas QR cawangan pada sangkar gas</p>
+  <div id="qr-reader"></div>
+  <button id="btn-skip-qr" class="outline">Skip QR (manual confirm)</button>
+  <button id="btn-back-home" class="outline">Back</button>
+</div>
+
+<!-- Screen 3: Cylinders -->
+<div id="screen-cylinders" class="screen">
+  <h2>Scan cylinders / Imbas silinder</h2>
+  <p id="cyl-info"></p>
+  <div id="qr-reader-cyl"></div>
+  <div id="scanned-list"></div>
+  <div class="row">
+    <button id="btn-add-manual">Add manual ID</button>
+    <button id="btn-to-media" class="secondary">Photo & Video →</button>
+  </div>
+  <button id="btn-back-arrive" class="outline">Back</button>
+</div>
+
+<!-- Screen 4: Photo + Video -->
+<div id="screen-media" class="screen">
+  <h2>Proof photo & video / Bukti foto & video</h2>
+  <p class="small">Timestamp will be burned in. Short video (5–10 s). / Cap masa akan ditanam. Video pendek.</p>
+  <video id="video-live" autoplay playsinline muted style="width:100%;max-height:240px;border-radius:8px;"></video>
+  <div class="row">
+    <button id="btn-photo">Take photo</button>
+    <button id="btn-video">Record video</button>
+  </div>
+  <img id="photo-preview" class="photo-preview hidden" alt="Photo">
+  <video id="video-preview" class="video-preview hidden" controls></video>
+  <p id="gps-status" class="small"></p>
+  <button id="btn-submit">Submit / Hantar</button>
+  <button id="btn-back-cyl" class="outline">Back</button>
+</div>
+
+<!-- Screen 5: Result -->
+<div id="screen-result" class="screen">
+  <h2>Result / Keputusan</h2>
+  <div id="result-content"></div>
+  <button id="btn-done">Done / Selesai</button>
+</div>
+
+<!-- Other branch modal-like -->
+<div id="screen-other" class="screen">
+  <h2>Other branch</h2>
+  <input id="branch-search" placeholder="Search code or name / Cari kod atau nama">
+  <div id="branch-results"></div>
+  <button id="btn-cancel-other" class="outline">Cancel</button>
+</div>
+
+<script>
+// ========== State ==========
+let config = {};
+let driver = localStorage.getItem('lb_driver') || '';
+let currentJob = null; // {order_id, branch_id, ...}
+let currentLocation = null; // branch object or depot
+let branchConfirmed = false;
+let changeReason = '';
+let scannedItems = []; // {cylinder_id, action}
+let photoData = null;
+let videoData = null;
+let thumbData = null;
+let gps = { lat: null, lon: null };
+let html5QrCode = null;
+let html5QrCodeCyl = null;
+let mediaStream = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+
+const DB_NAME = 'lpg-driver-db';
+const DB_STORE = 'queue';
+let db = null;
+
+// ========== IndexedDB ==========
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains(DB_STORE)) d.createObjectStore(DB_STORE, { keyPath: 'batch_id' });
+    };
+    req.onsuccess = e => { db = e.target.result; resolve(db); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function queuePayload(payload) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).put(payload);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+function getQueue() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readonly');
+    const req = tx.objectStore(DB_STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function removeFromQueue(batch_id) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).delete(batch_id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ========== Helpers ==========
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (id !== 'screen-arrive' && html5QrCode) { html5QrCode.stop().catch(()=>{}); html5QrCode = null; }
+  if (id !== 'screen-cylinders' && html5QrCodeCyl) { html5QrCodeCyl.stop().catch(()=>{}); html5QrCodeCyl = null; }
+  if (id !== 'screen-media' && mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+}
+
+function getStatePrefix(state) {
+  const map = {
+    'selangor': 'SL', 'kuala lumpur': 'KL', 'negeri sembilan': 'NS', 'melaka': 'MK',
+    'johor': 'JB', 'perak': 'PK', 'pahang': 'PH', 'kelantan': 'KT', 'terengganu': 'TG',
+    'pulau pinang': 'PP', 'perlis': 'PS', 'sarawak': 'SW', 'sabah': 'SB'
+  };
+  return map[(state || '').toLowerCase()] || (state || '').substring(0,2).toUpperCase();
+}
+
+function makeBranchCode(branch, state) {
+  if (!branch) return '??';
+  let name = branch.replace(/laundrybar|megastore/gi, '').trim();
+  const words = name.split(/\s+/).filter(w => w.length > 0);
+  let initials;
+  if (words.length === 1) {
+    initials = words[0].substring(0, 3).toUpperCase();
+  } else {
+    initials = words.map(w => w[0]).join('').toUpperCase();
+  }
+  const prefix = getStatePrefix(state);
+  return `${prefix}_${initials}`;
+}
+
+function showBranch(b) {
+  const code = makeBranchCode(b.branch, b.state);
+  return `${code} · ${b.branch}`;
+}
+
+function uuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0, v = c === 'x' ? r : (r&0x3|0x8);
+    return v.toString(16);
+  });
+}
+
+async function updateQueueBadge() {
+  const q = await getQueue();
+  const badge = document.getElementById('queue-badge');
+  if (q.length) {
+    badge.textContent = `${q.length} waiting to upload`;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+// ========== Init ==========
+async function init() {
+  await openDB();
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(console.warn);
+  }
+  document.getElementById('driver-name').textContent = driver || 'Select name';
+  await loadConfig();
+  if (!driver) {
+    showScreen('screen-setup');
+  } else {
+    showScreen('screen-home');
+    renderJobs();
+    updateQueueBadge();
+  }
+}
+
+async function loadConfig() {
+  try {
+    const url = `${window.LB_CONFIG.url}?action=config&key=${encodeURIComponent(window.LB_CONFIG.key)}`;
+    const res = await fetch(url);
+    config = await res.json();
+    if (!config.ok) throw new Error('Config failed');
+  } catch (e) {
+    console.error(e);
+    alert('Cannot load config. Check connection and config.js. Will try again later.');
+    config = { branches: [], drivers: ['Demo Driver'], openOrders: [], gpsLimit: 200, depot: {branch_id:'DEPOT', branch:'Depot'} };
+  }
+  const sel = document.getElementById('driver-select');
+  sel.innerHTML = '<option value="">— Select —</option>' + (config.drivers || []).map(d => `<option value="${d}">${d}</option>`).join('');
+  if (driver) sel.value = driver;
+}
+
+// ========== Screens logic ==========
+document.getElementById('btn-start').onclick = async () => {
+  const sel = document.getElementById('driver-select');
+  driver = sel.value;
+  if (!driver) return alert('Please select your name');
+  localStorage.setItem('lb_driver', driver);
+  document.getElementById('driver-name').textContent = driver;
+  // Permissions
+  try {
+    await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    navigator.geolocation.getCurrentPosition(() => {}, () => {});
+  } catch (e) {
+    alert('Camera permission is required for scanning and proof photos.');
+  }
+  showScreen('screen-home');
+  renderJobs();
+  updateQueueBadge();
+};
+
+function renderJobs() {
+  const list = document.getElementById('jobs-list');
+  const myOrders = (config.openOrders || []).filter(o => o.driver === driver);
+  if (!myOrders.length) {
+    list.innerHTML = '<div class="card">No open jobs for you today.</div>';
+    return;
+  }
+  list.innerHTML = myOrders.map(o => {
+    const b = (config.branches || []).find(x => x.branch_id === o.branch_id) || { branch: o.branch_id, state: '' };
+    return `<div class="card">
+      <strong>${showBranch(b)}</strong><br>
+      Cylinders: ${o.cylinders || '?'} · Order: ${o.order_id || '—'}
+      <button onclick="startDelivery('${o.order_id || ''}','${o.branch_id}')">Start delivery</button>
+    </div>`;
+  }).join('');
+}
+
+window.startDelivery = function(order_id, branch_id) {
+  currentJob = (config.openOrders || []).find(o => o.order_id === order_id) || { order_id, branch_id };
+  currentLocation = (config.branches || []).find(b => b.branch_id === branch_id) || { branch_id, branch: branch_id };
+  branchConfirmed = false;
+  changeReason = '';
+  scannedItems = [];
+  photoData = videoData = thumbData = null;
+  document.getElementById('arrive-info').innerHTML = `<strong>${showBranch(currentLocation)}</strong><br>Order: ${order_id || '—'}`;
+  showScreen('screen-arrive');
+  startBranchScanner();
+};
+
+document.getElementById('btn-depot').onclick = () => {
+  currentJob = null;
+  currentLocation = config.depot || { branch_id: 'DEPOT', branch: 'Depot' };
+  branchConfirmed = true; // depot may not have QR
+  scannedItems = [];
+  photoData = videoData = thumbData = null;
+  document.getElementById('cyl-info').textContent = 'Depot mode: load or return cylinders';
+  showScreen('screen-cylinders');
+  startCylScanner();
+};
+
+document.getElementById('btn-other').onclick = () => {
+  showScreen('screen-other');
+  renderBranchSearch('');
+};
+
+document.getElementById('branch-search').oninput = e => renderBranchSearch(e.target.value);
+
+function renderBranchSearch(q) {
+  const qn = q.toLowerCase();
+  const results = (config.branches || []).filter(b => {
+    const code = makeBranchCode(b.branch, b.state).toLowerCase();
+    return code.includes(qn) || (b.branch || '').toLowerCase().includes(qn);
+  }).slice(0, 20);
+  document.getElementById('branch-results').innerHTML = results.map(b => 
+    `<div class="card" onclick="selectOther('${b.branch_id}')">${showBranch(b)}</div>`
+  ).join('') || '<p>No matches</p>';
+}
+
+window.selectOther = function(branch_id) {
+  const reason = prompt('Reason for different branch? / Sebab cawangan berbeza?') || 'Other';
+  changeReason = reason;
+  currentJob = null;
+  currentLocation = (config.branches || []).find(b => b.branch_id === branch_id);
+  branchConfirmed = false;
+  scannedItems = [];
+  showScreen('screen-arrive');
+  document.getElementById('arrive-info').innerHTML = `<strong>${showBranch(currentLocation)}</strong> (other)`;
+  startBranchScanner();
+};
+
+document.getElementById('btn-cancel-other').onclick = () => showScreen('screen-home');
+
+function startBranchScanner() {
+  if (html5QrCode) html5QrCode.stop().catch(()=>{});
+  html5QrCode = new Html5Qrcode('qr-reader');
+  html5QrCode.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 250, height: 250 } },
+    onBranchScan,
+    () => {}
+  ).catch(err => console.warn('QR start failed', err));
+}
+
+function onBranchScan(decoded) {
+  // Assume QR contains branch_id or code
+  const matched = (config.branches || []).find(b => 
+    b.branch_id === decoded || makeBranchCode(b.branch, b.state) === decoded
+  );
+  if (matched && matched.branch_id === currentLocation.branch_id) {
+    branchConfirmed = true;
+    alert('Branch confirmed! / Cawangan disahkan!');
+    html5QrCode.stop().then(() => {
+      showScreen('screen-cylinders');
+      document.getElementById('cyl-info').textContent = showBranch(currentLocation);
+      startCylScanner();
+    });
+  } else {
+    alert('QR does not match this branch. Try again or skip.');
+  }
+}
+
+document.getElementById('btn-skip-qr').onclick = () => {
+  if (confirm('Skip QR confirmation? GPS will still be checked.')) {
+    branchConfirmed = false;
+    showScreen('screen-cylinders');
+    document.getElementById('cyl-info').textContent = showBranch(currentLocation) + ' (QR skipped)';
+    startCylScanner();
+  }
+};
+
+document.getElementById('btn-back-home').onclick = () => showScreen('screen-home');
+
+function startCylScanner() {
+  if (html5QrCodeCyl) html5QrCodeCyl.stop().catch(()=>{});
+  html5QrCodeCyl = new Html5Qrcode('qr-reader-cyl');
+  html5QrCodeCyl.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: 250 },
+    onCylScan,
+    () => {}
+  ).catch(()=>{});
+}
+
+function onCylScan(id) {
+  if (scannedItems.some(i => i.cylinder_id === id)) return;
+  const action = prompt(`Action for ${id}? (deliver / collect / load / return)`, currentLocation.branch_id === 'DEPOT' ? 'load' : 'deliver');
+  if (!action) return;
+  scannedItems.push({ cylinder_id: id, action: action.toLowerCase() });
+  renderScanned();
+}
+
+function renderScanned() {
+  document.getElementById('scanned-list').innerHTML = scannedItems.map((i, idx) => 
+    `<div class="card">${i.cylinder_id} · ${i.action} <button onclick="removeCyl(${idx})" style="width:auto;padding:6px 10px;margin:0">Remove</button></div>`
+  ).join('') || '<p>No cylinders scanned yet</p>';
+}
+
+window.removeCyl = function(idx) {
+  scannedItems.splice(idx, 1);
+  renderScanned();
+};
+
+document.getElementById('btn-add-manual').onclick = () => {
+  const id = prompt('Cylinder ID (e.g. LPG-50-0012)');
+  if (id) onCylScan(id);
+};
+
+document.getElementById('btn-to-media').onclick = () => {
+  showScreen('screen-media');
+  startCamera();
+  getGPS();
+};
+
+document.getElementById('btn-back-arrive').onclick = () => showScreen('screen-arrive');
+
+async function startCamera() {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: true });
+    document.getElementById('video-live').srcObject = mediaStream;
+  } catch (e) {
+    alert('Camera access failed');
+  }
+}
+
+document.getElementById('btn-photo').onclick = async () => {
+  const video = document.getElementById('video-live');
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+  // Burn timestamp
+  const ts = new Date().toLocaleString();
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(10, canvas.height - 40, 280, 30);
+  ctx.fillStyle = '#fff';
+  ctx.font = '20px Nunito Sans';
+  ctx.fillText(ts, 20, canvas.height - 18);
+  photoData = canvas.toDataURL('image/jpeg', 0.7);
+  // Thumb
+  const tcanvas = document.createElement('canvas');
+  tcanvas.width = 160;
+  tcanvas.height = 160 * (canvas.height / canvas.width);
+  tcanvas.getContext('2d').drawImage(canvas, 0, 0, tcanvas.width, tcanvas.height);
+  thumbData = tcanvas.toDataURL('image/jpeg', 0.6);
+  const prev = document.getElementById('photo-preview');
+  prev.src = photoData;
+  prev.classList.remove('hidden');
+};
+
+document.getElementById('btn-video').onclick = () => {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    document.getElementById('btn-video').textContent = 'Record video';
+    return;
+  }
+  recordedChunks = [];
+  const options = { mimeType: 'video/webm;codecs=vp9' };
+  try {
+    mediaRecorder = new MediaRecorder(mediaStream, options);
+  } catch (e) {
+    mediaRecorder = new MediaRecorder(mediaStream);
+  }
+  mediaRecorder.ondataavailable = e => { if (e.data.size) recordedChunks.push(e.data); };
+  mediaRecorder.onstop = async () => {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    videoData = await blobToDataURL(blob);
+    const prev = document.getElementById('video-preview');
+    prev.src = URL.createObjectURL(blob);
+    prev.classList.remove('hidden');
+  };
+  mediaRecorder.start();
+  document.getElementById('btn-video').textContent = 'Stop recording';
+  setTimeout(() => { if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop(); }, 10000);
+};
+
+function blobToDataURL(blob) {
+  return new Promise(res => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.readAsDataURL(blob);
+  });
+}
+
+function getGPS() {
+  navigator.geolocation.getCurrentPosition(pos => {
+    gps.lat = pos.coords.latitude;
+    gps.lon = pos.coords.longitude;
+    document.getElementById('gps-status').textContent = `GPS: ${gps.lat.toFixed(5)}, ${gps.lon.toFixed(5)}`;
+  }, () => {
+    document.getElementById('gps-status').textContent = 'GPS unavailable';
+  }, { enableHighAccuracy: true, timeout: 10000 });
+}
+
+document.getElementById('btn-back-cyl').onclick = () => showScreen('screen-cylinders');
+
+document.getElementById('btn-submit').onclick = async () => {
+  if (!scannedItems.length) return alert('Scan at least one cylinder');
+  if (!photoData) return alert('Photo is required');
+  const batch_id = uuid();
+  const payload = {
+    key: window.LB_CONFIG.key,
+    batch_id,
+    driver,
+    location_id: currentLocation.branch_id || 'DEPOT',
+    order_id: currentJob ? currentJob.order_id : null,
+    lat: gps.lat,
+    lon: gps.lon,
+    branch_confirmed: branchConfirmed,
+    change_reason: changeReason || null,
+    items: scannedItems,
+    photo: photoData,
+    video: videoData,
+    thumb: thumbData
+  };
+  await submitOrQueue(payload);
+};
+
+async function submitOrQueue(payload) {
+  try {
+    const res = await fetch(window.LB_CONFIG.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    showResult(data, payload);
+    if (data.ok) await removeFromQueue(payload.batch_id); // in case it was queued
+  } catch (e) {
+    await queuePayload(payload);
+    alert('Offline – queued for later upload. / Tiada signal – dalam barisan.');
+    showResult({ ok: false, error: 'Queued offline', flags: ['Queued for upload'] }, payload);
+  }
+  updateQueueBadge();
+}
+
+function showResult(data, payload) {
+  let html = data.ok ? '<p style="color:green;font-weight:700">Success! / Berjaya!</p>' : `<p style="color:var(--pink)">Error: ${data.error || 'Failed'}</p>`;
+  if (data.flags && data.flags.length) {
+    html += `<div class="flags">Flags: ${data.flags.join(', ')}</div>`;
+  }
+  if (data.gps_distance_m != null) html += `<p>GPS distance: ${data.gps_distance_m} m</p>`;
+  if (data.location) html += `<p>Location: ${data.location}</p>`;
+  document.getElementById('result-content').innerHTML = html;
+  showScreen('screen-result');
+}
+
+document.getElementById('btn-done').onclick = () => {
+  showScreen('screen-home');
+  renderJobs();
+  // reload config to refresh orders
+  loadConfig().then(renderJobs);
+};
+
+document.getElementById('btn-sync').onclick = async () => {
+  const q = await getQueue();
+  if (!q.length) return alert('Nothing to sync');
+  let ok = 0;
+  for (const p of q) {
+    try {
+      const res = await fetch(window.LB_CONFIG.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(p)
+      });
+      const data = await res.json();
+      if (data.ok) {
+        await removeFromQueue(p.batch_id);
+        ok++;
+      }
+    } catch (e) {}
+  }
+  alert(`Synced ${ok} of ${q.length}`);
+  updateQueueBadge();
+  loadConfig().then(renderJobs);
+};
+
+// Start
+init();
+</script>
+</body>
+</html>
